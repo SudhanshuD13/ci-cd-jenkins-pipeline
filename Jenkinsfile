@@ -26,7 +26,6 @@ pipeline {
                         detect --source /path \
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
-                        --no-git \
                         --exit-code 1 || true
                     [ -f gitleaks-report.json ] || touch gitleaks-report.json
                 '''
