@@ -20,11 +20,13 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm \
+                        -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
                         -v $(pwd):/path \
                         zricethezav/gitleaks:latest \
                         detect --source /path \
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
+                        --no-git \
                         --exit-code 1
                 '''
             }
@@ -39,16 +41,26 @@ pipeline {
         stage('SonarQube - Code Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    sh '''
-                        docker run --rm \
-                            --network ci-cd-jenkins-pipeline_devops-net \
-                            -v $(pwd):/usr/src \
-                            sonarsource/sonar-scanner-cli \
-                            -Dsonar.projectKey=${SONAR_PROJECT} \
-                            -Dsonar.sources=/usr/src/app \
-                            -Dsonar.host.url=http://sonarqube:9000 \
-                            -Dsonar.login=${SONAR_AUTH_TOKEN}
-                    '''
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            docker run --rm \
+                                --network ci-cd-jenkins-pipeline_devops-net \
+                                -v $(pwd)/app:/usr/src \
+                                sonarsource/sonar-scanner-cli \
+                                -Dsonar.projectKey=${SONAR_PROJECT} \
+                                -Dsonar.sources=/usr/src \
+                                -Dsonar.host.url=http://sonarqube:9000 \
+                                -Dsonar.login=$SONAR_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -107,9 +119,10 @@ pipeline {
             steps {
                 sh '''
                     docker stop flask-app || true
-                    docker rm flask-app   || true
+                    docker rm flask-app || true
                     docker run -d \
                         --name flask-app \
+                        --restart always \
                         -p 5000:5000 \
                         ${DOCKER_IMAGE}:${DOCKER_TAG}
                 '''
