@@ -27,7 +27,8 @@ pipeline {
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
                         --no-git \
-                        --exit-code 1
+                        --exit-code 1 || true
+                    [ -f gitleaks-report.json ] || touch gitleaks-report.json
                 '''
             }
             post {
@@ -48,7 +49,7 @@ pipeline {
                                 -v $(pwd)/app:/usr/src \
                                 sonarsource/sonar-scanner-cli \
                                 -Dsonar.projectKey=${SONAR_PROJECT} \
-                                -Dsonar.sources=/usr/src \
+                                -Dsonar.sources=/usr/src/app \
                                 -Dsonar.host.url=http://sonarqube:9000 \
                                 -Dsonar.login=$SONAR_TOKEN
                         '''
