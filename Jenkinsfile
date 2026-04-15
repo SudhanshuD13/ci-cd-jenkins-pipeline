@@ -21,12 +21,10 @@ pipeline {
                 sh '''
                     docker run --rm \
                         --user root \
+                        -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
                         -v $(pwd):/path \
                         zricethezav/gitleaks:latest \
-                        detect --source /path \
-                        --report-format json \
-                        --report-path /path/gitleaks-report.json \
-                        --exit-code 1 || true
+                        sh -c "git config --global --add safe.directory /path && gitleaks detect --source /path --report-format json --report-path /path/gitleaks-report.json --exit-code 1" || true
 
                     [ -f gitleaks-report.json ] || touch gitleaks-report.json
                 '''
@@ -52,10 +50,15 @@ pipeline {
                                 -v $(pwd):/usr/src \
                                 sonarsource/sonar-scanner-cli \
                                 -Dsonar.projectKey=${SONAR_PROJECT} \
-                                -Dsonar.sources=app \
+                                -Dsonar.sources=. \
                                 -Dsonar.host.url=http://sonarqube:9000 \
                                 -Dsonar.token=$SONAR_TOKEN \
                                 -Dsonar.working.directory=/usr/src/.scannerwork
+
+                            if [ -f .scannerwork/report-task.txt ]; then
+                                mv .scannerwork/report-task.txt .
+                                echo "✅ report-task.txt moved to root"
+                            fi
                         '''
                     }
                 }
