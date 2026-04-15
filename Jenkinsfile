@@ -24,11 +24,13 @@ pipeline {
                         -v $(pwd):/path \
                         zricethezav/gitleaks:latest \
                         detect --source /path \
+                        --no-git \
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
                         --exit-code 1 || true
                     [ -f gitleaks-report.json ] || touch gitleaks-report.json
                 '''
+                // Added --no-git above to stop the "not a git repository" error
             }
             post {
                 always {
@@ -45,13 +47,16 @@ pipeline {
                         sh '''
                             docker run --rm \
                                 --network ci-cd-jenkins-pipeline_devops-net \
-                                -v $(pwd)/app:/usr/src \
+                                -v $(pwd):/usr/src \
                                 sonarsource/sonar-scanner-cli \
                                 -Dsonar.projectKey=${SONAR_PROJECT} \
-                                -Dsonar.sources=/usr/src \
+                                -Dsonar.sources=/usr/src/app \
                                 -Dsonar.host.url=http://sonarqube:9000 \
                                 -Dsonar.login=$SONAR_TOKEN
                         '''
+                        // FIX: Changed -v $(pwd)/app:/usr/src TO -v $(pwd):/usr/src
+                        // FIX: Changed -Dsonar.sources=/usr/src TO -Dsonar.sources=/usr/src/app
+                        // Now report-task.txt is written to the root workspace.
                     }
                 }
             }
