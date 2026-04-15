@@ -19,7 +19,13 @@ pipeline {
         stage('Gitleaks - Secret Scan') {
             steps {
                 sh '''
+                    # 1. Debug: Check if files exist in the workspace before running
+                    echo "Checking workspace files..."
+                    ls -la
+
+                    # 2. Run Gitleaks as root to avoid permission issues
                     docker run --rm \
+                        --user root \
                         -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
                         -v $(pwd):/path \
                         zricethezav/gitleaks:latest \
@@ -28,9 +34,10 @@ pipeline {
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
                         --exit-code 1 || true
+
+                    # 3. Ensure report exists for the archive step
                     [ -f gitleaks-report.json ] || touch gitleaks-report.json
                 '''
-                // Added --no-git above to stop the "not a git repository" error
             }
             post {
                 always {
@@ -43,20 +50,20 @@ pipeline {
         stage('SonarQube - Code Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([
+                        string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')
+                    ]) {
                         sh '''
                             docker run --rm \
                                 --network ci-cd-jenkins-pipeline_devops-net \
                                 -v $(pwd):/usr/src \
                                 sonarsource/sonar-scanner-cli \
                                 -Dsonar.projectKey=${SONAR_PROJECT} \
-                                -Dsonar.sources=/usr/src/app \
+                                -Dsonar.sources=app \
                                 -Dsonar.host.url=http://sonarqube:9000 \
-                                -Dsonar.login=$SONAR_TOKEN
+                                -Dsonar.token=$SONAR_TOKEN \
+                                -Dsonar.working.directory=/usr/src/.scannerwork
                         '''
-                        // FIX: Changed -v $(pwd)/app:/usr/src TO -v $(pwd):/usr/src
-                        // FIX: Changed -Dsonar.sources=/usr/src TO -Dsonar.sources=/usr/src/app
-                        // Now report-task.txt is written to the root workspace.
                     }
                 }
             }
@@ -106,11 +113,13 @@ pipeline {
 
         stage('Docker Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
                     sh '''
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                         docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
