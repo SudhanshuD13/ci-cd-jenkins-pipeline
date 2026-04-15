@@ -19,23 +19,15 @@ pipeline {
         stage('Gitleaks - Secret Scan') {
             steps {
                 sh '''
-                    # 1. Debug: Check if files exist in the workspace before running
-                    echo "Checking workspace files..."
-                    ls -la
-
-                    # 2. Run Gitleaks as root to avoid permission issues
                     docker run --rm \
                         --user root \
-                        -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
                         -v $(pwd):/path \
                         zricethezav/gitleaks:latest \
                         detect --source /path \
-                        --no-git \
                         --report-format json \
                         --report-path /path/gitleaks-report.json \
                         --exit-code 1 || true
 
-                    # 3. Ensure report exists for the archive step
                     [ -f gitleaks-report.json ] || touch gitleaks-report.json
                 '''
             }
@@ -55,6 +47,7 @@ pipeline {
                     ]) {
                         sh '''
                             docker run --rm \
+                                --user root \
                                 --network ci-cd-jenkins-pipeline_devops-net \
                                 -v $(pwd):/usr/src \
                                 sonarsource/sonar-scanner-cli \
